@@ -8,3 +8,5 @@ function update() {
     let sliderValue = document.getElementById("inputSlider").value;
     document.getElementById("sliderLabel").innerHTML = sliderValue + " " + scoreLabels[sliderValue-1];
 }
+
+alert(movieData[0].tags);
