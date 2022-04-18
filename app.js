@@ -4,35 +4,62 @@ var express = require('express');
 var fs = require('fs');
 var mysql = require('mysql');
 
+const configData = JSON.parse(fs.readFileSync('config.json'));
+
 var dbConnection;
-fs.readFile('config.json', (err, data) => {
+dbConnection = mysql.createConnection(configData.dbOptions);
+dbConnection.connect((err) => {
     if (err) throw err;
 
-    dbConnection = mysql.createConnection(JSON.parse(data).dbOptions);
-
-    dbConnection.connect((err) => {
-        if (err) throw err;
-    
-        console.log("Connected to database!");
-    })
+    console.log("Connected to database!");
 });
 
-var app = express();
 
+
+var app = express();
 app.listen('8080', () => {
     console.log('Webserver open on port 8080!');
 });
-
 app.use(express.urlencoded({
     extended: true
 }));
 
 app.get('/', (req, res) => {
     console.log('/ requested!');
-    fs.readFile('site/index.html', (err, data) => {
-        res.writeHead(200, {'Content-Type': 'text/html'});
-        res.write(data);
-        return res.end();
+
+    //Generate grid of movies as html using bootstrap of course
+    let movieGrid = '';
+    dbConnection.query('SELECT * FROM movies', (err, result, fields) => {
+        if (err) throw err;
+
+        for (let row = 0; row < result.length/4; row++) {
+            //Start row
+            movieGrid += '<div class="row">'
+
+            //Add four movies
+            for (let i = 0; i < 4; i++) {
+                if (i + row*4 < result.length) {
+                    //Add movie
+                    movieGrid += '\n\t<div class="col-sm-3">\n\t\t<button class="btn" type="button" onclick="movieClicked(' + result[row*4 + i].id + ')">\n\t\t\t<img src="' + result[row*4 + i].imageURL + '" style="width:100%">\n\t\t</button>\n\t</div>';
+                } else {
+                    //Index out of bounds
+                    break;
+                }
+            }
+
+            //End row
+            movieGrid += '\n</div>'
+        }
+
+        //Insert grid into index.html
+        fs.readFile('site/index.html', 'utf-8', (err, data) => {
+            res.writeHead(200, {'Content-Type': 'text/html'});
+            
+            data = data.replace('{0}', movieGrid);
+
+            res.write(data);
+            return res.end();
+        });
     });
 });
 app.get('/main.js', (req, res) => {

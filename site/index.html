@@ -8,15 +8,24 @@
   </head>
   <body class="bg-dark">
     <script src="/main.js" defer></script>
-
-    <nav class="navbar navbar-expand-sm navbar-dark bg-secondary">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="/">Logo</a>
-        <div class="collapse navbar-collapse justify-content-sm-end">
-          <button class="btn btn-link" type="button" style="text-decoration:none;color:white">Opret bruger</button>
-          <a class="btn btn-primary" type="button" href="login.html">Log ind</a>
-        </div>
-      </div>
-    </nav>
+    <div class="container">
+      <header class="d-flex flex-wrap justify-content-center py-3 border-bottom">
+        <a href="/" class="d-flex align-items-center me-md-auto text-white text-decoration-none">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+            <path d="M1 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V2zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V2zM1 7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V7zM1 12a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-2zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-2zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-2z"/>
+          </svg>
+          <span class="fs-4">Home</span>
+        </a>
+        <ul class="nav nav-pills">
+          <li class="nav-item">
+            <a href="login.html" class="nav-link active" aria-current="page">Log ind</a>
+          </li>
+        </ul>
+      </header>
+    </div>
+    <div class="container">
+      <h1 class="mt-5 mb-3">Vælg en film du kan lide:</h1>
+      {0}
+    </div>
   </body>
 </html>
