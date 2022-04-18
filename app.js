@@ -1,23 +1,21 @@
-var hashPepper = 'edd8ff41-7fcf-45bc-9e2f-1aa488167f3b'; //DO NOT CHANGE. I CAN'T STRESS THIS ENOUGH, IF THIS IS CHANGED, THE DATABASE WILL BE USELESS!!!!!
-
 var { createHash } = require('crypto');
 //Example hash: createHash('sha256').update('message' + hashPepper).digest('hex');
 var express = require('express');
 var fs = require('fs');
 var mysql = require('mysql');
 
-var dbConnection = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "root",
-    database: "mml"
-});
-
-dbConnection.connect((err) => {
+var dbConnection;
+fs.readFile('config.json', (err, data) => {
     if (err) throw err;
 
-    console.log("Connected to database!");
-})
+    dbConnection = mysql.createConnection(JSON.parse(data).dbOptions);
+
+    dbConnection.connect((err) => {
+        if (err) throw err;
+    
+        console.log("Connected to database!");
+    })
+});
 
 var app = express();
 
@@ -29,7 +27,7 @@ app.use(express.urlencoded({
     extended: true
 }));
 
-app.get('/', function(req, res) {
+app.get('/', (req, res) => {
     console.log('/ requested!');
     fs.readFile('site/index.html', (err, data) => {
         res.writeHead(200, {'Content-Type': 'text/html'});
@@ -39,7 +37,7 @@ app.get('/', function(req, res) {
 });
 app.get('/main.js', (req, res) => {
     console.log('/main.js requested!');
-    fs.readFile('site/main.js', function(err, data) {
+    fs.readFile('site/main.js', (err, data) => {
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.write(data);
         return res.end();
