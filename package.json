@@ -1,9 +1,0 @@
-{
-  "dependencies": {
-    "cheerio": "^1.0.0-rc.10",
-    "crypto": "^1.0.1",
-    "express": "^4.17.3",
-    "express-validator": "^6.14.0",
-    "mysql": "^2.18.1"
-  }
-}
