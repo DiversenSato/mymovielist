@@ -99,7 +99,7 @@ app.post(
         
         //Check the hashed value from db with the hashed value of inputted password
         let dbHash = result[0].phash;
-        let hash = createHash('sha256').update(req.body.password + hashPepper).digest('hex');
+        let hash = createHash('sha256').update(req.body.password + configData.hashPepper).digest('hex');
 
         if (dbHash == hash) {
             res.send("Logged in!");
