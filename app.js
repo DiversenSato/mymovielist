@@ -1,11 +1,14 @@
-var { createHash } = require('crypto');
+const { createHash } = require('crypto');
 //Example hash: createHash('sha256').update('message' + hashPepper).digest('hex');
-var express = require('express');
-var fs = require('fs');
-var mysql = require('mysql');
+const express = require('express');
+const https = require('https');
+const events = require('events');
+const fs = require('fs');
+const mysql = require('mysql');
 
 const configData = JSON.parse(fs.readFileSync('config.json'));
 
+//Connect application to database
 var dbConnection;
 dbConnection = mysql.createConnection(configData.dbOptions);
 dbConnection.connect((err) => {
@@ -16,6 +19,7 @@ dbConnection.connect((err) => {
 
 
 
+//Start web application
 var app = express();
 app.listen('8080', () => {
     console.log('Webserver open on port 8080!');
@@ -24,23 +28,58 @@ app.use(express.urlencoded({
     extended: true
 }));
 
+//Set routes
 app.get('/', (req, res) => {
     console.log('/ requested!');
 
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
-    dbConnection.query('SELECT * FROM movies', (err, result, fields) => {
+    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT 48;', async (err, result, fields) => {
         if (err) throw err;
 
-        for (let row = 0; row < result.length/4; row++) {
+        let missingUrls = 0;
+        for (let row = 0; row < result.length/6; row++) {
             //Start row
             movieGrid += '<div class="row">'
 
-            //Add four movies
-            for (let i = 0; i < 4; i++) {
-                if (i + row*4 < result.length) {
+            //Add six movies
+            for (let i = 0; i < 6; i++) {
+                if (i + row*6 < result.length) {
+                    let movieIndex = i + row*6;
                     //Add movie
-                    movieGrid += '\n\t<div class="col-sm-3">\n\t\t<button class="btn" type="button" onclick="movieClicked(' + result[row*4 + i].id + ')">\n\t\t\t<img src="' + result[row*4 + i].imageURL + '" style="width:100%">\n\t\t</button>\n\t</div>';
+                    let movieID = result[movieIndex].movieID;
+                    let url = result[movieIndex].imageURL;
+                    let movieName = result[movieIndex].name;
+                    let rating = result[movieIndex].rating;
+
+                    if (url == null) {
+                        missingUrls++;
+                        let data = '';
+                        let response = https.get('https://api.themoviedb.org/3/movie/' + movieID + '/images?api_key=' + configData.apiKey, (resp) => {
+                            resp.on('data', (chunk) => {
+                                data += chunk;
+                            });
+
+                            resp.on('error', (respErr) => {
+                                console.error(respErr);
+                            });
+
+                            resp.on('end', () => {
+                                let dataJson = JSON.parse(data);
+                                if (typeof dataJson.posters === 'undefined') {
+                                    url = '';
+                                } else {
+                                    url = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
+
+                                    //Update database since it doesn't have the url
+                                    updateDatabaseURL(url, movieID);
+                                }
+                                response.emit('end');
+                            });
+                        });
+                        //await events.once(response, 'end');
+                    }
+                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" type="button" href="https://www.imdb.com/title/' + movieID + '")" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
                     break;
@@ -50,6 +89,7 @@ app.get('/', (req, res) => {
             //End row
             movieGrid += '\n</div>'
         }
+        console.log(missingUrls + ' missing URLs');
 
         //Insert grid into index.html
         fs.readFile('site/index.html', 'utf-8', (err, data) => {
@@ -83,6 +123,7 @@ app.get('/login.html', (req, res) => {
 
 const {body, validationResult} = require('express-validator');
 
+//Handle login posts
 app.post(
     '/login',
     body('email').isEmail(),
@@ -108,3 +149,10 @@ app.post(
         }
     });
 });
+
+
+
+async function updateDatabaseURL(url, movieID) {
+    let query = dbConnection.query('UPDATE movies SET imageURL = "' + url + '" WHERE movieID = "' + movieID + '";');
+    query.on('error', (err) => {});
+}
