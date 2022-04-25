@@ -1,8 +1,10 @@
-var { createHash } = require('crypto');
+const { createHash } = require('crypto');
 //Example hash: createHash('sha256').update('message' + hashPepper).digest('hex');
-var express = require('express');
-var fs = require('fs');
-var mysql = require('mysql');
+const express = require('express');
+const https = require('https');
+const events = require('events');
+const fs = require('fs');
+const mysql = require('mysql');
 
 const configData = JSON.parse(fs.readFileSync('config.json'));
 
@@ -29,18 +31,50 @@ app.get('/', (req, res) => {
 
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
-    dbConnection.query('SELECT * FROM movies', (err, result, fields) => {
+    dbConnection.query('SELECT * FROM movies ORDER BY RAND() LIMIT 24;', async (err, result, fields) => {
         if (err) throw err;
 
-        for (let row = 0; row < result.length/4; row++) {
+        let missingUrls = 0;
+        for (let row = 0; row < result.length/6; row++) {
             //Start row
             movieGrid += '<div class="row">'
 
             //Add four movies
-            for (let i = 0; i < 4; i++) {
-                if (i + row*4 < result.length) {
+            for (let i = 0; i < 6; i++) {
+                if (i + row*6 < result.length) {
+                    let movieIndex = i + row*6;
                     //Add movie
-                    movieGrid += '\n\t<div class="col-sm-3">\n\t\t<button class="btn" type="button" onclick="movieClicked(' + result[row*4 + i].id + ')">\n\t\t\t<img src="' + result[row*4 + i].imageURL + '" style="width:100%">\n\t\t</button>\n\t</div>';
+                    let movieID = result[movieIndex].movieID;
+                    let url = result[movieIndex].imageURL;
+
+                    if (url == null) {
+                        missingUrls++;
+                        let data = '';
+                        let response = https.get('https://api.themoviedb.org/3/movie/' + movieID + '/images?api_key=' + configData.apiKey, (resp) => {
+                            resp.on('data', (chunk) => {
+                                data += chunk;
+                            });
+
+                            resp.on('end', () => {
+                                let dataJson = JSON.parse(data);
+                                if (typeof dataJson.posters == 'undefined') {
+                                    url = '';
+                                } else {
+                                    url = dataJson.posters[0].file_path;
+                                }
+                                response.emit('end');
+                            });
+                        });
+                        await events.once(response, 'end');
+                        url = 'https://image.tmdb.org/t/p/w500' + url;
+
+                        //Update database since it doesn't have the url
+                        let query = dbConnection.query('UPDATE movies SET imageURL = "' + url + '" WHERE movieID = "' + movieID + '";');
+                        query.on('error', (err) => {});
+
+                        await events.once(query, 'end');
+                    }
+                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" type="button" href="https://www.imdb.com/title/' + movieID + '")">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
                     break;
@@ -50,6 +84,7 @@ app.get('/', (req, res) => {
             //End row
             movieGrid += '\n</div>'
         }
+        console.log(missingUrls + ' missing URLs');
 
         //Insert grid into index.html
         fs.readFile('site/index.html', 'utf-8', (err, data) => {
