@@ -2,6 +2,7 @@ const { createHash } = require('crypto');
 //Example hash: createHash('sha256').update('message' + hashPepper).digest('hex');
 const express = require('express');
 const https = require('https');
+const url = require('url');
 const events = require('events');
 const fs = require('fs');
 const mysql = require('mysql');
@@ -30,11 +31,9 @@ app.use(express.urlencoded({
 
 //Set routes
 app.get('/', (req, res) => {
-    console.log('/ requested!');
-
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
-    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT 48;', async (err, result, fields) => {
+    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 10)*48 + ', 48;', async (err, result, fields) => {
         if (err) throw err;
 
         let missingUrls = 0;
@@ -78,8 +77,9 @@ app.get('/', (req, res) => {
                             });
                         });
                         //await events.once(response, 'end');
+                        url = '/getImage?movieID=' + movieID;
                     }
-                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" type="button" href="https://www.imdb.com/title/' + movieID + '")" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
+                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="https://www.imdb.com/title/' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
                     break;
@@ -89,7 +89,7 @@ app.get('/', (req, res) => {
             //End row
             movieGrid += '\n</div>'
         }
-        console.log(missingUrls + ' missing URLs');
+        //console.log(missingUrls + ' missing URLs');
 
         //Insert grid into index.html
         fs.readFile('site/index.html', 'utf-8', (err, data) => {
@@ -103,7 +103,6 @@ app.get('/', (req, res) => {
     });
 });
 app.get('/main.js', (req, res) => {
-    console.log('/main.js requested!');
     fs.readFile('site/main.js', (err, data) => {
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.write(data);
@@ -111,12 +110,25 @@ app.get('/main.js', (req, res) => {
     });
 });
 app.get('/login.html', (req, res) => {
-    console.log('/login.html requested!');
     fs.readFile('site/login.html', function(err, data) {
         res.writeHead(200, {'Content-Type': 'text/html'});
         res.write(data);
         return res.end();
     });
+});
+
+app.get('/getImage', (req, res) => {
+    console.log('Getting image...');
+    res.type('jpg');
+    setTimeout(() => {
+        const movieID = url.parse(req.url, true).query.movieID;
+        dbConnection.query('SELECT * FROM movies WHERE movieID = "' + movieID + '";', (err, result, fields) => {
+            if (err) throw err;
+            
+            console.log('Sending url... ' + result);
+            res.send(result[0].imageURL);
+        });
+    }, 10000);
 });
 
 
@@ -155,4 +167,8 @@ app.post(
 async function updateDatabaseURL(url, movieID) {
     let query = dbConnection.query('UPDATE movies SET imageURL = "' + url + '" WHERE movieID = "' + movieID + '";');
     query.on('error', (err) => {});
+}
+
+function getRandomInt(min, range) {
+    return Math.round(Math.random() * range + min);
 }
