@@ -2,6 +2,7 @@ const { createHash } = require('crypto');
 //Example hash: createHash('sha256').update('message' + hashPepper).digest('hex');
 const express = require('express');
 const https = require('https');
+const request = require('request');
 const url = require('url');
 const events = require('events');
 const fs = require('fs');
@@ -25,18 +26,16 @@ var app = express();
 app.listen('8080', () => {
     console.log('Webserver open on port 8080!');
 });
-app.use(express.urlencoded({
-    extended: true
-}));
+app.use(express.urlencoded({ extended: true }));
 
 //Set routes
 app.get('/', (req, res) => {
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
-    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 10)*48 + ', 48;', async (err, result, fields) => {
+    //Get random set of 48 movies
+    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 187)*48 + ', 48;', async (err, result, fields) => {
         if (err) throw err;
 
-        let missingUrls = 0;
         for (let row = 0; row < result.length/6; row++) {
             //Start row
             movieGrid += '<div class="row">'
@@ -52,33 +51,9 @@ app.get('/', (req, res) => {
                     let rating = result[movieIndex].rating;
 
                     if (url == null) {
-                        missingUrls++;
-                        let data = '';
-                        let response = https.get('https://api.themoviedb.org/3/movie/' + movieID + '/images?api_key=' + configData.apiKey, (resp) => {
-                            resp.on('data', (chunk) => {
-                                data += chunk;
-                            });
-
-                            resp.on('error', (respErr) => {
-                                console.error(respErr);
-                            });
-
-                            resp.on('end', () => {
-                                let dataJson = JSON.parse(data);
-                                if (typeof dataJson.posters === 'undefined') {
-                                    url = '';
-                                } else {
-                                    url = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
-
-                                    //Update database since it doesn't have the url
-                                    updateDatabaseURL(url, movieID);
-                                }
-                                response.emit('end');
-                            });
-                        });
-                        //await events.once(response, 'end');
                         url = '/getImage?movieID=' + movieID;
                     }
+
                     movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="https://www.imdb.com/title/' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
@@ -89,46 +64,55 @@ app.get('/', (req, res) => {
             //End row
             movieGrid += '\n</div>'
         }
-        //console.log(missingUrls + ' missing URLs');
 
         //Insert grid into index.html
         fs.readFile('site/index.html', 'utf-8', (err, data) => {
-            res.writeHead(200, {'Content-Type': 'text/html'});
-            
             data = data.replace('{0}', movieGrid);
 
-            res.write(data);
-            return res.end();
+            res.send(data);
         });
     });
 });
 app.get('/main.js', (req, res) => {
     fs.readFile('site/main.js', (err, data) => {
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.write(data);
-        return res.end();
+        return res.send(data);
     });
 });
 app.get('/login.html', (req, res) => {
     fs.readFile('site/login.html', function(err, data) {
-        res.writeHead(200, {'Content-Type': 'text/html'});
+        res.type('html');
         res.write(data);
-        return res.end();
+        res.end();
     });
 });
 
 app.get('/getImage', (req, res) => {
-    console.log('Getting image...');
-    res.type('jpg');
-    setTimeout(() => {
-        const movieID = url.parse(req.url, true).query.movieID;
-        dbConnection.query('SELECT * FROM movies WHERE movieID = "' + movieID + '";', (err, result, fields) => {
-            if (err) throw err;
-            
-            console.log('Sending url... ' + result);
-            res.send(result[0].imageURL);
+    const movieID = url.parse(req.url, true).query.movieID;
+    let data = '';
+    https.get('https://api.themoviedb.org/3/movie/' + movieID + '/images?api_key=' + configData.apiKey, (resp) => {
+        resp.on('data', (chunk) => {
+            data += chunk;
         });
-    }, 10000);
+
+        resp.on('error', (respErr) => {
+            console.error(respErr);
+            res.status(500).end();
+        });
+
+        resp.on('end', () => {
+            let dataJson = JSON.parse(data);
+            if (dataJson.posters == undefined || dataJson.posters[0] == undefined) {
+                console.log(dataJson);
+                url = '';
+            } else {
+                let imageURL = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
+
+                //Update database since it doesn't have the url
+                updateDatabaseURL(imageURL, movieID);
+                res.redirect(302, imageURL);
+            }
+        });
+    });
 });
 
 
