@@ -5,10 +5,6 @@ exports.processFile = async function(inputName, outputName, sqlBit, condition) {
 
     var lineCount = 0;
 
-    const wS = fs.createWriteStream(outputName, {
-        encoding: 'utf-8'
-    })
-
     try {
         const rl = readline.createInterface({
             input: fs.createReadStream(inputName),
@@ -24,9 +20,9 @@ exports.processFile = async function(inputName, outputName, sqlBit, condition) {
             if (lineCount != 0) {
                 const columns = line.split('\t');
                 
-                let newLine = '("' + columns[0] + '","' + columns[8] + '")';
+                let newLine = '("' + columns[0] + '","' + columns[1] + '")';
 
-                if (eval(condition)) {
+                if (columns[1] != '\\N') {
                     valuesArray.push(newLine);
                 }
             }
@@ -39,20 +35,27 @@ exports.processFile = async function(inputName, outputName, sqlBit, condition) {
         console.log(valuesArray.length + ' resulting rows');
         rl.close();
         
-        wS.write('INSERT INTO ' + sqlBit + ' VALUES ' + valuesArray[0]);
-        for (let i = 1; i < valuesArray.length; i++) {
-            if (i % 500 == 0) {
+        fs.appendFileSync(outputName, 'INSERT INTO ' + sqlBit + ' VALUES ' + valuesArray.shift());
+        let counter = 0;
+        while (valuesArray.length > 0) {
+            const element = valuesArray.shift();
+            if (counter % 500 == 0) {
                 //Create new line in .sql
-                if (i != 1) {
-                    wS.write(';\n');
+                if (counter != 1) {
+                    fs.appendFileSync(outputName, ';\n');
                 }
-                wS.write('INSERT INTO ' + sqlBit + ' VALUES ' + valuesArray[i]);
+                fs.appendFileSync(outputName, 'INSERT INTO ' + sqlBit + ' VALUES ' + element);
             } else {
                 //Append values
-                wS.write(',' + valuesArray[i]);
+                fs.appendFileSync(outputName, ',' + element);
             }
+            if (counter % 2000 == 0) {
+                console.log(valuesArray.length);
+            }
+
+            counter++;
         }
-        wS.write(';');
+        fs.appendFileSync(outputName, ';');
 
         return 1; //1 is success
     } catch (err) {
