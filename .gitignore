@@ -5,3 +5,4 @@ package.json
 data.tsv
 pHashGenerator.js
 imdb data/
+databaseBackups/
