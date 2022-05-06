@@ -30,7 +30,7 @@ app.get('/', (req, res) => {
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
     //Get random set of 48 movies
-    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 187)*48 + ', 48;', async (err, result, fields) => {
+    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 130)*48 + ', 48;', async (err, result, fields) => {
         if (err) throw err;
 
         for (let row = 0; row < result.length/6; row++) {
@@ -99,8 +99,14 @@ app.get('/getImage', (req, res) => {
         resp.on('end', () => {
             let dataJson = JSON.parse(data);
             if (dataJson.posters == undefined || dataJson.posters[0] == undefined) {
-                console.log(dataJson);
-                url = '';
+                //API where poster urls might not have the url
+                //In which case just delete the movie from db
+                dbConnection.query('DELETE FROM movies WHERE movieID = ?;', [movieID], (err, result) => {});
+
+                //However the browser or whoever is still expecting an image
+                res.status(404);
+                res.sendFile('site/imageNotFound.png');
+                res.end();
             } else {
                 let imageURL = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
 
@@ -136,7 +142,7 @@ app.post(
         let hash = createHash('sha256').update(req.body.password + configData.hashPepper).digest('hex');
 
         if (dbHash == hash) {
-            res.send("Logged in!");
+            res.redirect(302, '/');
         } else {
             res.send("Password mismatch!");
         }
@@ -151,5 +157,5 @@ async function updateDatabaseURL(url, movieID) {
 }
 
 function getRandomInt(min, range) {
-    return Math.round(Math.random() * range + min);
+    return Math.round(Math.pow(Math.random(), 3) * range + min);
 }
