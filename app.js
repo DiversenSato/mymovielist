@@ -15,16 +15,13 @@ var dbConnection;
 dbConnection = mysql.createConnection(configData.dbOptions);
 dbConnection.connect((err) => {
     if (err) throw err;
-
-    console.log("Connected to database!");
 });
 
 
 
 //Start web application
 var app = express();
-app.listen('8080', () => {
-    console.log('Webserver open on port 8080!');
+app.listen('8080', () => { 
 });
 app.use(express.urlencoded({ extended: true }));
 
