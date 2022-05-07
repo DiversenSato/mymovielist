@@ -13,15 +13,15 @@ dbConnection.connect((err) => {
         if (err) throw err;
 
         //Write header
-        fs.appendFileSync(outputFileName, 'movieID\tname\trating\tmainActorName\tdirectorName\tgenres\timageURL\n', (err) => {
+        fs.appendFileSync(outputFileName, 'movieID\tname\trating\tvoteCount\tmainActorName\tdirectorName\tgenres\timageURL\n', (err) => {
             if (err) throw err;
         });
 
         //Write data
         for (let i = 0; i < result.length; i++) { //Loop through every row
             const r = result[i];
-            let row = r.movieID + '\t' + r.name + '\t' + r.rating + '\t' + r.mainActorName + '\t';
-            row += r.directorName + '\t' + r.genres + '\t' + r.imageURL + '\n';
+            let row = r.movieID + '\t' + r.name + '\t' + r.rating + '\t' + r.voteCount + '\t';
+            row += r.mainActorName + '\t' + r.directorName + '\t' + r.genres + '\t' + r.imageURL + '\n';
 
             fs.appendFileSync(outputFileName, row, (err) => {
                 if (err) throw err;
