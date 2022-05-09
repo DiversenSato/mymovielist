@@ -69,7 +69,7 @@ app.get('/', (req, res) => {
                         url = '/getImage?movieID=' + movieID;
                     }
 
-                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="https://www.imdb.com/title/' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
+                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="/title/' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
                     break;
