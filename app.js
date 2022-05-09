@@ -1,12 +1,12 @@
 const { createHash } = require('crypto');
 //Example hash: createHash('sha256').update('message' + hashPepper).digest('hex');
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const https = require('https');
-const request = require('request');
 const url = require('url');
-const events = require('events');
 const fs = require('fs');
 const mysql = require('mysql');
+const {sha256} = require('./sha256');
 
 const configData = JSON.parse(fs.readFileSync('config.json'));
 
@@ -24,13 +24,31 @@ var app = express();
 app.listen('8080', () => { 
 });
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 //Set routes
 app.get('/', (req, res) => {
+    //Validate user sessionToken
+    const cookies = req.cookies;
+    console.log(cookies);
+
+    let loginButtons = '<ul class="nav nav-pills">\n<li class="nav-item">\n<a href="login.html" class="nav-link active" aria-current="page">Log ind</a>\n</li>\n<li class="nav-item">\n<a href="login.html" class="nav-link" aria-current="page">Opret bruger</a>\n</li>\n</ul>'
+    if (cookies) {
+        //Check if session cookie is in there
+        const sessionToken = cookies.sessionToken;
+        if (sessionToken) {
+            const generatedToken = sha256(cookies.userID + getDate() + configData.sessionTokenPepper);
+            if (sessionToken == generatedToken) {
+                //sessionToken is valid
+                loginButtons = '<div class="flex-shrink-0 dropdown">\n<a href="#" class="d-block line-dark text-decoration-none dropdown-toggle" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">\n<img src="imageNotFound.png" width="32" height="32" class="rounded-circle">\n::after\n</a>\n<ul class="dropdown-menu text-small shadow show" aria-labelledby="userDropdown" style="position: absolute; inset: 0px 0px auto auto; margin: 0px; transform: translate(0px, 34px);" data-popper-placement="bottom-end">\n<li>\n<a class="dropdown-item" href="#">Profile</a>\n</li>\n</ul>\n</div>';
+            }
+        }
+    }
+
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
     //Get random set of 48 movies
-    dbConnection.query('SELECT * FROM movies JOIN ratings ON movies.movieID = ratings.movieID ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 130)*48 + ', 48;', async (err, result, fields) => {
+    dbConnection.query('SELECT * FROM movies ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 130)*48 + ', 48;', async (err, result, fields) => {
         if (err) throw err;
 
         for (let row = 0; row < result.length/6; row++) {
@@ -65,6 +83,7 @@ app.get('/', (req, res) => {
         //Insert grid into index.html
         fs.readFile('site/index.html', 'utf-8', (err, data) => {
             data = data.replace('{0}', movieGrid);
+            data = data.replace('{1}', loginButtons);
 
             res.send(data);
         });
@@ -105,7 +124,7 @@ app.get('/getImage', (req, res) => {
 
                 //However the browser or whoever is still expecting an image
                 res.status(404);
-                res.sendFile('site/imageNotFound.png');
+                res.sendFile('C:\\Users\\diver\\Documents\\GitHub\\mymovielist\\site\\imageNotFound.png');
                 res.end();
             } else {
                 let imageURL = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
@@ -142,9 +161,12 @@ app.post(
         let hash = createHash('sha256').update(req.body.password + configData.hashPepper).digest('hex');
 
         if (dbHash == hash) {
+            res.cookie('sessionToken', sha256(result[0].id + getDate() + configData.sessionTokenPepper));
+            res.cookie('userID', result[0].id);
             res.redirect(302, '/');
         } else {
             res.send("Password mismatch!");
+            res.end();
         }
     });
 });
@@ -157,5 +179,10 @@ async function updateDatabaseURL(url, movieID) {
 }
 
 function getRandomInt(min, range) {
-    return Math.round(Math.pow(Math.random(), 3) * range + min);
+    return Math.round(Math.pow(Math.random(), 1) * range + min);
+}
+
+function getDate() {
+    const date = new Date();
+    return '' + date.getFullYear() + '_' + (date.getMonth()+1) + '_' + date.getDate();
 }
