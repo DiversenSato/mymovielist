@@ -14,18 +14,13 @@ const {sha256} = require('./sha256');
 const configData = JSON.parse(fs.readFileSync('config.json'));
 
 //Set DNS IP address to servers ip
-let shellCommands = 'sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 8080\ncurl -s -u "' + configData.DNSAccountName + ':' + configData.DNSApiKey + '" -X POST "https://api.simply.com/2/ddns/?domain=mymovielist.dk&hostname=@"';
-fs.writeFile('setIP.sh', shellCommands, (err) => {
-    if (err) throw err;
-    return;
-    exec('sh setIP.sh', (error, stdout, stderr) => {
-        if (error !== null) {
-		    console.log('Couldn\'t update DNS');
-            return;
-	    }
-        console.log('Posted IP');   
-    });
-});
+/*exec('sh setIP.sh', (error, stdout, stderr) => {
+    if (error !== null) {
+        console.log('Couldn\'t update DNS');
+        return;
+    }
+    console.log('Posted IP');   
+});*/
 
 //Connect application to database
 var dbConnection;
