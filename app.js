@@ -64,7 +64,7 @@ app.get('/', (req, res) => {
                         url = '/getImage?movieID=' + movieID;
                     }
 
-                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="/rate?movieID=' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
+                    movieGrid += '\n\t<div class="col-xxl-2 col-xl-4 col-md-6 col-sm-12">\n\t\t<a class="btn" href="/rate?movieID=' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
                     break;
@@ -277,7 +277,7 @@ app.get('/logOut', (req, res) => {
 
 
 async function updateDatabaseURL(url, movieID) {
-    let query = dbConnection.query('UPDATE movies SET imageURL = "' + url + '" WHERE movieID = "' + movieID + '";');
+    let query = dbConnection.query('UPDATE movies SET imageURL = ? WHERE movieID = ?;', [url, movieID]);
     query.on('error', (err) => {});
 }
 
@@ -302,7 +302,7 @@ function getLoginOptions(req) {
             if (sessionToken == generatedToken) {
                 //sessionToken is valid
                 loginOptions =  '<div class="dropdown">';
-                loginOptions += '<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown"><img src="/site?file=samuel.png" style="width: 32px;"></button>';
+                loginOptions += '<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown"><img src="/site?file=images/samuel.png" style="width: 32px;"></button>';
                 loginOptions += '<div class="dropdown-menu">';
                 loginOptions += '<a class="dropdown-item" href="#">Profile</a>';
                 loginOptions += '<a class="dropdown-item" href="/logOut">Log ud</a>';
