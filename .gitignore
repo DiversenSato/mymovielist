@@ -8,3 +8,5 @@ pHashGenerator.js
 imdb data/
 databaseBackups/
 QueryGen.js
+createSQL.js
+backupDatabase.js
