@@ -5,10 +5,26 @@ const cookieParser = require('cookie-parser');
 const https = require('https');
 const url = require('url');
 const fs = require('fs');
+const path = require('path');
 const mysql = require('mysql');
+const {exec} = require('child_process');
 const {sha256} = require('./sha256');
 
 const configData = JSON.parse(fs.readFileSync('config.json'));
+
+//Set DNS IP address to servers ip
+let shellCommands = 'sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 8080\ncurl -s -u "' + configData.DNSAccountName + ':' + configData.DNSApiKey + '" -X POST "https://api.simply.com/2/ddns/?domain=mymovielist.dk&hostname=@"';
+fs.writeFile('setIP.sh', shellCommands, (err) => {
+    if (err) throw err;
+    console.log('Created file with contents: ' + shellCommands);
+    return;
+    exec('sh setIP.sh', (error, stdout, stderr) => {
+        if (error !== null) {
+		    console.log('Couldn\'t update DNS');
+	    }
+        console.log('Posted IP');   
+    });
+});
 
 //Connect application to database
 var dbConnection;
@@ -30,7 +46,6 @@ app.use(cookieParser());
 app.get('/', (req, res) => {
     //Validate user sessionToken
     const cookies = req.cookies;
-    console.log(cookies);
 
     let loginButtons = '<ul class="nav nav-pills">\n<li class="nav-item">\n<a href="login.html" class="nav-link active" aria-current="page">Log ind</a>\n</li>\n<li class="nav-item">\n<a href="login.html" class="nav-link" aria-current="page">Opret bruger</a>\n</li>\n</ul>'
     if (cookies) {
@@ -40,7 +55,12 @@ app.get('/', (req, res) => {
             const generatedToken = sha256(cookies.userID + getDate() + configData.sessionTokenPepper);
             if (sessionToken == generatedToken) {
                 //sessionToken is valid
-                loginButtons = '<div class="flex-shrink-0 dropdown">\n<a href="#" class="d-block line-dark text-decoration-none dropdown-toggle" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">\n<img src="imageNotFound.png" width="32" height="32" class="rounded-circle">\n::after\n</a>\n<ul class="dropdown-menu text-small shadow show" aria-labelledby="userDropdown" style="position: absolute; inset: 0px 0px auto auto; margin: 0px; transform: translate(0px, 34px);" data-popper-placement="bottom-end">\n<li>\n<a class="dropdown-item" href="#">Profile</a>\n</li>\n</ul>\n</div>';
+                loginButtons =  '<div class="dropdown">';
+                loginButtons += '<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown"><img src="/site?file=samuel.png" style="width: 32px;"></button>';
+                loginButtons += '<div class="dropdown-menu">';
+                loginButtons += '<a class="dropdown-item" href="#">Profile</a>';
+                loginButtons += '<a class="dropdown-item" href="/logOut">Log ud</a>';
+                loginButtons += '</div>';
             }
         }
     }
@@ -94,6 +114,11 @@ app.get('/main.js', (req, res) => {
         return res.send(data);
     });
 });
+app.get('/rate.js', (req, res) => {
+    fs.readFile('site/rate.js', (err, data) => {
+        return res.send(data);
+    });
+});
 app.get('/login.html', (req, res) => {
     fs.readFile('site/login.html', function(err, data) {
         res.type('html');
@@ -124,7 +149,7 @@ app.get('/getImage', (req, res) => {
 
                 //However the browser or whoever is still expecting an image
                 res.status(404);
-                res.sendFile('C:\\Users\\diver\\Documents\\GitHub\\mymovielist\\site\\imageNotFound.png');
+                res.sendFile(path.resolve('site/imageNotFound.png'));
                 res.end();
             } else {
                 let imageURL = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
@@ -137,9 +162,38 @@ app.get('/getImage', (req, res) => {
     });
 });
 
+app.get('/site', (req, res) => {
+    const file = url.parse(req.url, true).query.file;
+    const options = {
+        root: path.resolve('site/')
+    }
+    res.sendFile(file, options, (err) => {
+        if (err) throw err;
+    });
+});
+
+app.get('/title', (req, res) => {
+    const movieID = url.parse(req.url, true).query.movieID;
+    fs.readFile('site/rate.html', 'utf-8', (err, data) => {
+        let movieTitle = 'Movie title not found!';
+
+        if (movieID) {
+            dbConnection.query('SELECT * FROM movies WHERE movieID = ?', [movieID], (err, result) => {
+                movieTitle = result[0].name;
+                data = data.replace('{0}', movieTitle);
+                res.send(data);
+            });
+        } else {
+            data = data.replace('{0}', movieTitle);
+            res.send(data);
+        }
+    });
+});
+
 
 
 const {body, validationResult} = require('express-validator');
+const { request } = require('http');
 
 //Handle login posts
 app.post(
@@ -171,6 +225,12 @@ app.post(
     });
 });
 
+app.get('/logOut', (req, res) => {
+    res.clearCookie('sessionToken');
+    res.clearCookie('userID');
+    res.redirect(302, '/');
+});
+
 
 
 async function updateDatabaseURL(url, movieID) {
@@ -179,7 +239,7 @@ async function updateDatabaseURL(url, movieID) {
 }
 
 function getRandomInt(min, range) {
-    return Math.round(Math.pow(Math.random(), 1) * range + min);
+    return Math.round(Math.pow(Math.random(), 8) * range + min);
 }
 
 function getDate() {
