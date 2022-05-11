@@ -7,3 +7,4 @@ data.tsv
 pHashGenerator.js
 imdb data/
 databaseBackups/
+QueryGen.js
