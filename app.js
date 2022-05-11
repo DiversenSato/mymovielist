@@ -7,6 +7,7 @@ const url = require('url');
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql');
+const crypto = require('crypto');
 const {exec} = require('child_process');
 const {sha256} = require('./sha256');
 
@@ -16,11 +17,11 @@ const configData = JSON.parse(fs.readFileSync('config.json'));
 let shellCommands = 'sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 8080\ncurl -s -u "' + configData.DNSAccountName + ':' + configData.DNSApiKey + '" -X POST "https://api.simply.com/2/ddns/?domain=mymovielist.dk&hostname=@"';
 fs.writeFile('setIP.sh', shellCommands, (err) => {
     if (err) throw err;
-    console.log('Created file with contents: ' + shellCommands);
     return;
     exec('sh setIP.sh', (error, stdout, stderr) => {
         if (error !== null) {
 		    console.log('Couldn\'t update DNS');
+            return;
 	    }
         console.log('Posted IP');   
     });
@@ -31,40 +32,19 @@ var dbConnection;
 dbConnection = mysql.createConnection(configData.dbOptions);
 dbConnection.connect((err) => {
     if (err) throw err;
+    console.log('Connected to database!');
 });
 
 
 
 //Start web application
 var app = express();
-app.listen('8080', () => { 
-});
+app.listen('8080');
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 //Set routes
 app.get('/', (req, res) => {
-    //Validate user sessionToken
-    const cookies = req.cookies;
-
-    let loginButtons = '<ul class="nav nav-pills">\n<li class="nav-item">\n<a href="login.html" class="nav-link active" aria-current="page">Log ind</a>\n</li>\n<li class="nav-item">\n<a href="login.html" class="nav-link" aria-current="page">Opret bruger</a>\n</li>\n</ul>'
-    if (cookies) {
-        //Check if session cookie is in there
-        const sessionToken = cookies.sessionToken;
-        if (sessionToken) {
-            const generatedToken = sha256(cookies.userID + getDate() + configData.sessionTokenPepper);
-            if (sessionToken == generatedToken) {
-                //sessionToken is valid
-                loginButtons =  '<div class="dropdown">';
-                loginButtons += '<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown"><img src="/site?file=samuel.png" style="width: 32px;"></button>';
-                loginButtons += '<div class="dropdown-menu">';
-                loginButtons += '<a class="dropdown-item" href="#">Profile</a>';
-                loginButtons += '<a class="dropdown-item" href="/logOut">Log ud</a>';
-                loginButtons += '</div>';
-            }
-        }
-    }
-
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
     //Get random set of 48 movies
@@ -89,7 +69,7 @@ app.get('/', (req, res) => {
                         url = '/getImage?movieID=' + movieID;
                     }
 
-                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="/title?movieID=' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
+                    movieGrid += '\n\t<div class="col-sm">\n\t\t<a class="btn" href="/rate?movieID=' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
                 } else {
                     //Index out of bounds
                     break;
@@ -97,14 +77,15 @@ app.get('/', (req, res) => {
             }
 
             //End row
-            movieGrid += '\n</div>'
+            movieGrid += '\n</div>';
         }
 
-        //Insert grid into index.html
-        fs.readFile('site/index.html', 'utf-8', (err, data) => {
-            data = data.replace('{0}', movieGrid);
-            data = data.replace('{1}', loginButtons);
-
+        fs.readFile('site/template.html', 'utf-8', (err, data) => {
+            //Replace parts of template
+            data = data.replace('{loginOptions}', getLoginOptions(req));
+            data = data.replace('{body}', fs.readFileSync('site/index.html', {encoding: 'utf8'}).replace('{movieGrid}', movieGrid));
+    
+            //Send back result
             res.send(data);
         });
     });
@@ -114,16 +95,29 @@ app.get('/main.js', (req, res) => {
         return res.send(data);
     });
 });
-app.get('/rate.js', (req, res) => {
-    fs.readFile('site/rate.js', (err, data) => {
-        return res.send(data);
+
+app.get('/signup.html', (req, res) => {
+    fs.readFile('site/template.html', 'utf-8', (err, data) => {
+        //Replace parts of template
+        data = data.replace('{loginOptions}', getLoginOptions(req));
+        data = data.replace('{body}', fs.readFileSync('site/signup.html'));
+
+        //Send back result
+        res.send(data);
     });
 });
+
+app.get('/rate.js', (req, res) => {
+    res.sendFile(path.resolve('site/rate.js'));
+});
 app.get('/login.html', (req, res) => {
-    fs.readFile('site/login.html', function(err, data) {
-        res.type('html');
-        res.write(data);
-        res.end();
+    fs.readFile('site/template.html', 'utf-8', (err, data) => {
+        //Replace parts of template
+        data = data.replace('{loginOptions}', getLoginOptions(req));
+        data = data.replace('{body}', fs.readFileSync('site/login.html'));
+
+        //Send back result
+        res.send(data);
     });
 });
 
@@ -167,33 +161,50 @@ app.get('/site', (req, res) => {
     const options = {
         root: path.resolve('site/')
     }
-    res.sendFile(file, options, (err) => {
-        if (err) throw err;
-    });
-});
-
-app.get('/title', (req, res) => {
-    const movieID = url.parse(req.url, true).query.movieID;
-    fs.readFile('site/rate.html', 'utf-8', (err, data) => {
-        let movieTitle = 'Movie title not found!';
-
-        if (movieID) {
-            dbConnection.query('SELECT * FROM movies WHERE movieID = ?', [movieID], (err, result) => {
-                movieTitle = result[0].name;
-                data = data.replace('{0}', movieTitle);
-                res.send(data);
-            });
+    fs.readFile('site/' + file, (err, data) => {
+        if (err) {
+            console.log('File not found: ' + file);
+            res.status(404);
+            res.end();
         } else {
-            data = data.replace('{0}', movieTitle);
             res.send(data);
         }
     });
 });
 
+app.get('/rate', (req, res) => {
+    const movieID = url.parse(req.url, true).query.movieID;
+    if (movieID) {
+        fs.readFile('site/template.html', 'utf-8', (err, data) => {
+            let movieTitle = 'Movie title not found!';
+    
+            dbConnection.query('SELECT * FROM movies WHERE movieID = ?', [movieID], (err, result) => {
+                if (err) throw err;
+                if (result.length == 0) {
+                    res.redirect(302, '/');
+                    return;
+                }
+    
+                movieTitle = result[0].name;
+            
+                //Replace parts of template
+                data = data.replace('{loginOptions}', getLoginOptions(req));
+                data = data.replace('{body}', fs.readFileSync('site/rate.html', {encoding: 'utf-8'}));
+                data = data.replace('{movieTitle}', movieTitle);
+                data = data.replace('{movieID}', movieID);
+    
+                //Send back result
+                res.send(data);
+            });
+        });
+    } else {
+        return res.status(404).end();
+    }
+});
+
 
 
 const {body, validationResult} = require('express-validator');
-const { request } = require('http');
 
 //Handle login posts
 app.post(
@@ -206,9 +217,12 @@ app.post(
         return res.status(400).json({errors: errors.array()});
     }
 
-    let sql = 'SELECT * FROM users WHERE email = "' + req.body.email + '";';
-    dbConnection.query(sql, (err, result, fields) => {
+    let sql = 'SELECT * FROM users WHERE email = ?;';
+    dbConnection.query(sql, [req.body.email], (err, result, fields) => {
         if (err) throw err;
+        if (result.length == 0) {
+            return res.status(400).end('No account found under email: ' + req.body.email + '!');
+        }
         
         //Check the hashed value from db with the hashed value of inputted password
         let dbHash = result[0].phash;
@@ -225,6 +239,40 @@ app.post(
     });
 });
 
+app.post('/signup',
+body('email').isEmail(),
+body('password').isLength({min: 5}),
+body('password2').isLength({min: 5}),
+(req, res) => {
+    let errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({errors: errors.array()});
+    }
+    if (req.body.password != req.body.password2) {
+        return res.status(400).end('Password mismatch!');
+    }
+
+    //Check if user is duplicate by seeing if the email is in the database
+    dbConnection.query('SELECT * FROM users WHERE email = ?', [req.body.email], (err, result) => {
+        if (err) throw err;
+        if (result.length > 0) {
+            return res.status(400).end('Duplicate email found!');
+        }
+
+        //If everything is ok, create user in the database and set user cookies
+        let sql = 'INSERT INTO users(id, name, email, phash) VALUES(?, ?, ?, ?);';
+        let parameters = [crypto.randomUUID(), req.body.username, req.body.email, generatePasswordHash(req.body.password)];
+        dbConnection.query(sql, parameters, (err, result, fields) => {
+            if (err) throw err;
+    
+            res.cookie('sessionToken', generateSessionToken(parameters[0].id));
+            res.cookie('userID', parameters[0].id);
+            res.redirect(302, '/');
+        });
+    })
+});
+
+//Log the user out if they send a logOut request
 app.get('/logOut', (req, res) => {
     res.clearCookie('sessionToken');
     res.clearCookie('userID');
@@ -245,4 +293,36 @@ function getRandomInt(min, range) {
 function getDate() {
     const date = new Date();
     return '' + date.getFullYear() + '_' + (date.getMonth()+1) + '_' + date.getDate();
+}
+
+function getLoginOptions(req) {
+    const cookies = req.cookies;
+
+    let loginOptions = '<ul class="nav nav-pills">\n<li class="nav-item">\n<a href="login.html" class="nav-link active" aria-current="page">Log ind</a>\n</li>\n<li class="nav-item">\n<a href="signup.html" class="nav-link" aria-current="page">Opret bruger</a>\n</li>\n</ul>';
+    if (cookies) {
+        //Check if session cookie is in there
+        const sessionToken = cookies.sessionToken;
+        if (sessionToken) {
+            const generatedToken = sha256(cookies.userID + getDate() + configData.sessionTokenPepper);
+            if (sessionToken == generatedToken) {
+                //sessionToken is valid
+                loginOptions =  '<div class="dropdown">';
+                loginOptions += '<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown"><img src="/site?file=samuel.png" style="width: 32px;"></button>';
+                loginOptions += '<div class="dropdown-menu">';
+                loginOptions += '<a class="dropdown-item" href="#">Profile</a>';
+                loginOptions += '<a class="dropdown-item" href="/logOut">Log ud</a>';
+                loginOptions += '</div>';
+            }
+        }
+    }
+
+    return loginOptions;
+}
+
+function generateSessionToken(userID) {
+    return sha256(userID + getDate() + configData.sessionTokenPepper);
+}
+
+function generatePasswordHash(password) {
+    return sha256(password + configData.hashPepper);
 }
