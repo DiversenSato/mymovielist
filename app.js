@@ -186,7 +186,7 @@ app.get('/rate', (req, res) => {
                 data = data.replace('{loginOptions}', getLoginOptions(req));
                 data = data.replace('{body}', fs.readFileSync('site/rate.html', {encoding: 'utf-8'}));
                 data = data.replace('{movieTitle}', movieTitle);
-                data = data.replace('{movieID}', movieID);
+                data = data.replace(/{movieID}/g, movieID);
     
                 //Send back result
                 res.send(data);
@@ -266,6 +266,17 @@ body('password2').isLength({min: 5}),
         });
     })
 });
+
+
+//Handle ratings sent to server
+app.post('/sendRating', (req, res) => {
+    const rating = req.body.ratingScore;  //Saves the rating of the movie
+    const movieID = req.body.movieID;     //Saves the movieID
+
+    //Magic algorithm goes here:
+    
+});
+
 
 //Log the user out if they send a logOut request
 app.get('/logOut', (req, res) => {
