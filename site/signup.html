@@ -1,8 +1,28 @@
+<button data-bs-toggle="modal" data-bs-target="#errorModal" style="display:none;" id="errorModalToggle">Vis modal</button>
+<div class="modal fade text-dark" id="errorModal" tabindex="-1" role="dialog" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="errorModalLabel">Fejl!</h5>
+                <button class="close" data-bs-dismiss="modal" aria-label="close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <h3>Der skete en fejl i registreringen!</h3>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Luk</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="container">
-    <form method="POST" action="/signup">
+    <form method="POST" action="/signup" id="signupForm">
         <div class="mb-3 mt-3">
             <label class="form-label text-white">Email:</label>
-            <input type="email" class="form-control" placeholder="Indtast email" name="email">
+            <input type="email" class="form-control" placeholder="Indtast email" name="email" id="email">
         </div>
         <div class="mb-3 mt-3">
             <label class="form-label text-white">Brugernavn:</label>
@@ -16,6 +36,8 @@
             <label class="form-label text-white">Gentag password:</label>
             <input type="password" class="form-control" placeholder="Indtast kodeord" name="password2">
         </div>
-        <button type="submit" class="btn btn-primary">Sign up</button>
+        <button type="submit" onclick="checkSubmission();return false;" class="btn btn-primary">Sign up</button>
     </form>
 </div>
+<!--Scripts-->
+<script src="/signup.js"></script>

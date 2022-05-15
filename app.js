@@ -9,7 +9,7 @@ const path = require('path');
 const mysql = require('mysql');
 const crypto = require('crypto');
 const {exec} = require('child_process');
-const {sha256} = require('./sha256');
+const hP = require('./helperFunctions');
 
 const configData = JSON.parse(fs.readFileSync('config.json'));
 
@@ -43,7 +43,7 @@ app.get('/', (req, res) => {
     //Generate grid of movies as html using bootstrap of course
     let movieGrid = '';
     //Get random set of 48 movies
-    dbConnection.query('SELECT * FROM movies ORDER BY voteCount DESC LIMIT ' + getRandomInt(0, 130)*48 + ', 48;', async (err, result, fields) => {
+    dbConnection.query('SELECT * FROM movies ORDER BY voteCount DESC LIMIT ' + hP.getRandomInt(0, 130)*48 + ', 48;', async (err, result, fields) => {
         if (err) throw err;
 
         for (let row = 0; row < result.length/6; row++) {
@@ -77,7 +77,7 @@ app.get('/', (req, res) => {
 
         fs.readFile('site/template.html', 'utf-8', (err, data) => {
             //Replace parts of template
-            data = data.replace('{loginOptions}', getLoginOptions(req));
+            data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
             data = data.replace('{body}', fs.readFileSync('site/index.html', {encoding: 'utf8'}).replace('{movieGrid}', movieGrid));
     
             //Send back result
@@ -94,11 +94,16 @@ app.get('/main.js', (req, res) => {
 app.get('/signup.html', (req, res) => {
     fs.readFile('site/template.html', 'utf-8', (err, data) => {
         //Replace parts of template
-        data = data.replace('{loginOptions}', getLoginOptions(req));
+        data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
         data = data.replace('{body}', fs.readFileSync('site/signup.html'));
 
         //Send back result
         res.send(data);
+    });
+});
+app.get('/signup.js', (req, res) => {
+    fs.readFile('site/signup.js', (err, data) => {
+        return res.send(data);
     });
 });
 
@@ -108,7 +113,7 @@ app.get('/rate.js', (req, res) => {
 app.get('/login.html', (req, res) => {
     fs.readFile('site/template.html', 'utf-8', (err, data) => {
         //Replace parts of template
-        data = data.replace('{loginOptions}', getLoginOptions(req));
+        data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
         data = data.replace('{body}', fs.readFileSync('site/login.html'));
 
         //Send back result
@@ -144,7 +149,7 @@ app.get('/getImage', (req, res) => {
                 let imageURL = 'https://image.tmdb.org/t/p/w500' + dataJson.posters[0].file_path;
 
                 //Update database since it doesn't have the url
-                updateDatabaseURL(imageURL, movieID);
+                hP.updateDatabaseURL(imageURL, movieID, dbConnection);
                 res.redirect(302, imageURL);
             }
         });
@@ -183,7 +188,7 @@ app.get('/rate', (req, res) => {
                 movieTitle = result[0].name;
             
                 //Replace parts of template
-                data = data.replace('{loginOptions}', getLoginOptions(req));
+                data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
                 data = data.replace('{body}', fs.readFileSync('site/rate.html', {encoding: 'utf-8'}));
                 data = data.replace('{movieTitle}', movieTitle);
                 data = data.replace(/{movieID}/g, movieID);
@@ -221,10 +226,10 @@ app.post(
         
         //Check the hashed value from db with the hashed value of inputted password
         let dbHash = result[0].phash;
-        let hash = createHash('sha256').update(req.body.password + configData.hashPepper).digest('hex');
+        let hash = hP.sha256(req.body.password + configData.hashPepper);
 
         if (dbHash == hash) {
-            res.cookie('sessionToken', sha256(result[0].id + getDate() + configData.sessionTokenPepper));
+            res.cookie('sessionToken', hP.generateSessionToken(result[0].id, configData.sessionTokenPepper));
             res.cookie('userID', result[0].id);
             res.redirect(302, '/');
         } else {
@@ -264,7 +269,22 @@ body('password2').isLength({min: 5}),
             res.cookie('userID', parameters[0].id);
             res.redirect(302, '/');
         });
-    })
+    });
+});
+app.post('/precheckEmail', (req, res) => {
+    dbConnection.query('SELECT * FROM users WHERE email = ?', [req.body.email], (err, result) => {
+        if (err) throw err;
+
+        let returnObject = {};
+        res.type('application/json');
+        if (result.length > 0) {
+            returnObject.exists = true;
+            return res.send(returnObject);
+        } else {
+            returnObject.exists = false;
+            return res.send(returnObject);
+        }
+    });
 });
 
 
@@ -284,51 +304,3 @@ app.get('/logOut', (req, res) => {
     res.clearCookie('userID');
     res.redirect(302, '/');
 });
-
-
-
-async function updateDatabaseURL(url, movieID) {
-    let query = dbConnection.query('UPDATE movies SET imageURL = ? WHERE movieID = ?;', [url, movieID]);
-    query.on('error', (err) => {});
-}
-
-function getRandomInt(min, range) {
-    return Math.round(Math.pow(Math.random(), 8) * range + min);
-}
-
-function getDate() {
-    const date = new Date();
-    return '' + date.getFullYear() + '_' + (date.getMonth()+1) + '_' + date.getDate();
-}
-
-function getLoginOptions(req) {
-    const cookies = req.cookies;
-
-    let loginOptions = '<ul class="nav nav-pills">\n<li class="nav-item">\n<a href="login.html" class="nav-link active" aria-current="page">Log ind</a>\n</li>\n<li class="nav-item">\n<a href="signup.html" class="nav-link" aria-current="page">Opret bruger</a>\n</li>\n</ul>';
-    if (cookies) {
-        //Check if session cookie is in there
-        const sessionToken = cookies.sessionToken;
-        if (sessionToken) {
-            const generatedToken = sha256(cookies.userID + getDate() + configData.sessionTokenPepper);
-            if (sessionToken == generatedToken) {
-                //sessionToken is valid
-                loginOptions =  '<div class="dropdown">';
-                loginOptions += '<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown"><img src="/site?file=images/samuel.png" style="width: 32px;"></button>';
-                loginOptions += '<div class="dropdown-menu">';
-                loginOptions += '<a class="dropdown-item" href="#">Profile</a>';
-                loginOptions += '<a class="dropdown-item" href="/logOut">Log ud</a>';
-                loginOptions += '</div>';
-            }
-        }
-    }
-
-    return loginOptions;
-}
-
-function generateSessionToken(userID) {
-    return sha256(userID + getDate() + configData.sessionTokenPepper);
-}
-
-function generatePasswordHash(password) {
-    return sha256(password + configData.hashPepper);
-}
