@@ -234,7 +234,6 @@ app.post(
             res.redirect(302, '/');
         } else {
             res.send("Password mismatch!");
-            res.end();
         }
     });
 });
@@ -246,44 +245,29 @@ body('password2').isLength({min: 5}),
 (req, res) => {
     let errors = validationResult(req);
     if (!errors.isEmpty()) {
+        console.log(errors);
         return res.status(400).json({errors: errors.array()});
     }
     if (req.body.password != req.body.password2) {
         return res.status(400).end('Password mismatch!');
     }
 
-    //Check if user is duplicate by seeing if the email is in the database
-    dbConnection.query('SELECT * FROM users WHERE email = ?', [req.body.email], (err, result) => {
+    //If everything is ok, create user in the database and set user cookies
+    let sql = 'INSERT INTO users(id, name, email, phash) VALUES(?, ?, ?, ?);';
+    let parameters = [crypto.randomUUID(), req.body.username, req.body.email, generatePasswordHash(req.body.password)];
+    dbConnection.query(sql, parameters, (err, result, fields) => {
         if (err) throw err;
-        if (result.length > 0) {
-            return res.status(400).end('Duplicate email found!');
-        }
 
-        //If everything is ok, create user in the database and set user cookies
-        let sql = 'INSERT INTO users(id, name, email, phash) VALUES(?, ?, ?, ?);';
-        let parameters = [crypto.randomUUID(), req.body.username, req.body.email, generatePasswordHash(req.body.password)];
-        dbConnection.query(sql, parameters, (err, result, fields) => {
-            if (err) throw err;
-    
-            res.cookie('sessionToken', generateSessionToken(parameters[0].id));
-            res.cookie('userID', parameters[0].id);
-            res.redirect(302, '/');
-        });
+        res.cookie('sessionToken', generateSessionToken(parameters[0].id));
+        res.cookie('userID', parameters[0].id);
+        res.redirect(302, '/');
     });
 });
 app.post('/precheckEmail', (req, res) => {
     dbConnection.query('SELECT * FROM users WHERE email = ?', [req.body.email], (err, result) => {
         if (err) throw err;
 
-        let returnObject = {};
-        res.type('application/json');
-        if (result.length > 0) {
-            returnObject.exists = true;
-            return res.send(returnObject);
-        } else {
-            returnObject.exists = false;
-            return res.send(returnObject);
-        }
+        return res.send({exists: (result.length > 0)});
     });
 });
 

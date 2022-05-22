@@ -9,7 +9,6 @@ function checkSubmission() {
             if (!res.exists) {
                 $("#signupForm").submit();
             } else {
-                console.log("Error");
                 $("#errorModalToggle").click();
             }
         }
