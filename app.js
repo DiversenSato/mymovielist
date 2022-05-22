@@ -14,13 +14,13 @@ const hP = require('./helperFunctions');
 const configData = JSON.parse(fs.readFileSync('config.json'));
 
 //Set DNS IP address to servers ip
-/*exec('sh setIP.sh', (error, stdout, stderr) => {
+exec('sh setIP.sh', (error, stdout, stderr) => {
     if (error !== null) {
         console.log('Couldn\'t update DNS');
         return;
     }
     console.log('Posted IP');   
-});*/
+});
 
 //Connect application to database
 var dbConnection;
@@ -64,7 +64,10 @@ app.get('/', (req, res) => {
                         url = '/getImage?movieID=' + movieID;
                     }
 
-                    movieGrid += '\n\t<div class="col-xl-2 col-lg-3 col-md-6 col-sm-12">\n\t\t<a class="btn" href="/rate?movieID=' + movieID + '" title="' + movieName + '\n' + rating + '/10 on IMDB">\n\t\t\t<img src="' + url + '" style="width:100%">\n\t\t</a>\n\t</div>';
+                    let img = '<img src="' + url + '" style="width:100%">';
+                    let button = '<button type="submit" class="btn" value="' + movieID + '" name="movieID" title="' + movieName + '\n' + rating + '/10 on IMDB">' + img + '</button>';
+
+                    movieGrid += '<div class="col-xl-2 col-lg-3 col-md-6 col-sm-12">' + button + '</div>';
                 } else {
                     //Index out of bounds
                     break;
@@ -72,12 +75,12 @@ app.get('/', (req, res) => {
             }
 
             //End row
-            movieGrid += '\n</div>';
+            movieGrid += '</div>';
         }
 
         fs.readFile('site/template.html', 'utf-8', (err, data) => {
             //Replace parts of template
-            data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
+            data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID, configData));
             data = data.replace('{body}', fs.readFileSync('site/index.html', {encoding: 'utf8'}).replace('{movieGrid}', movieGrid));
     
             //Send back result
@@ -94,7 +97,7 @@ app.get('/main.js', (req, res) => {
 app.get('/signup.html', (req, res) => {
     fs.readFile('site/template.html', 'utf-8', (err, data) => {
         //Replace parts of template
-        data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
+        data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID, configData));
         data = data.replace('{body}', fs.readFileSync('site/signup.html'));
 
         //Send back result
@@ -113,7 +116,7 @@ app.get('/rate.js', (req, res) => {
 app.get('/login.html', (req, res) => {
     fs.readFile('site/template.html', 'utf-8', (err, data) => {
         //Replace parts of template
-        data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID));
+        data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID, configData));
         data = data.replace('{body}', fs.readFileSync('site/login.html'));
 
         //Send back result
@@ -205,6 +208,7 @@ app.get('/rate', (req, res) => {
 
 
 const {body, validationResult} = require('express-validator');
+const { defaultProxyHeaderWhiteList } = require('request/request');
 
 //Handle login posts
 app.post(
@@ -274,11 +278,114 @@ app.post('/precheckEmail', (req, res) => {
 
 //Handle ratings sent to server
 app.post('/sendRating', (req, res) => {
-    const rating = req.body.ratingScore;  //Saves the rating of the movie
     const movieID = req.body.movieID;     //Saves the movieID
 
     //Magic algorithm goes here:
-    
+    dbConnection.query('SELECT * FROM movies where movieID = ?', [movieID], (err, selectMovieResult) => {
+        let selectedMovie = selectMovieResult[0];
+        const genres = selectMovieResult[0].genres.toLowerCase().split(',');
+
+        dbConnection.query('SELECT * FROM movies WHERE movieID != ?;', [movieID], (err, movieResult) => {
+            let distanceValues = [];
+            for (let i = 0; i < movieResult.length; i++) {
+                let currentMovie = movieResult[i];
+
+                const currentMovieGenres = currentMovie.genres.toLowerCase().split(',');
+
+                let matchingTags = 0;
+                for (let j = 0; j < genres.length; j++) {
+                    for (let k = 0; k < currentMovieGenres.length; k++) {
+                        if (genres[j] == currentMovieGenres[k]) {
+                            matchingTags++;
+                            genreMatch = true;
+                        }
+                    }
+                }
+                let matchingPercent = matchingTags / genres.length * 5;
+                if (matchingTags == 0) {
+                    continue;
+                }
+
+                //If the main actors of the movie is the same, give a small boost in distance function
+                let actorBonus = 0;
+                if (currentMovie.mainActorName == selectedMovie.mainActorName) {
+                    actorBonus = 5;
+                }
+                
+                let newMovie = movieResult[i];
+                newMovie.distance = Math.sqrt(Math.pow(currentMovie.rating - selectedMovie.rating, 2) + Math.pow(currentMovie.voteCount - selectedMovie.voteCount, 2) - matchingPercent - actorBonus);
+                distanceValues.push(newMovie);
+            }
+
+            let sorted = false;
+            while(!sorted) {
+                let loopComplete = true;
+                for (let i = 0; i < distanceValues.length-1; i++) {
+                    if (distanceValues[i].distance > distanceValues[i+1].distance) {
+                        let temp = distanceValues[i];
+                        distanceValues[i] = distanceValues[i+1];
+                        distanceValues[i+1] = temp;
+                        loopComplete = false;
+                    }
+                }
+
+                if (loopComplete) {
+                    sorted = true;
+                }
+            }
+
+            let bestMatches = [];
+            for (let i = 0; i < 48; i++) {
+                if (bestMatches) {
+                    bestMatches.push(distanceValues[i]);
+                }
+            }
+            
+            //Generate grid of movies as html using bootstrap of course
+            let movieGrid = '';
+            //Get random set of 48 movies
+            for (let row = 0; row < bestMatches.length/6; row++) {
+                //Start row
+                movieGrid += '<div class="row">'
+
+                //Add six movies
+                for (let i = 0; i < 6; i++) {
+                    if (i + row*6 < bestMatches.length) {
+                        let movieIndex = i + row*6;
+                        //Add movie
+                        let movieID = bestMatches[movieIndex].movieID;
+                        let url = bestMatches[movieIndex].imageURL;
+                        let movieName = bestMatches[movieIndex].name;
+                        let rating = bestMatches[movieIndex].rating;
+
+                        if (url == null) {
+                            url = '/getImage?movieID=' + movieID;
+                        }
+
+                        let img = '<img src="' + url + '" style="width:100%">';
+                        let button = '<button type="submit" class="btn" value="' + movieID + '" name="movieID" title="' + movieName + '\n' + rating + '/10 on IMDB">' + img + '</button>';
+
+                        movieGrid += '<div class="col-xl-2 col-lg-3 col-md-6 col-sm-12">' + button + '</div>';
+                    } else {
+                        //Index out of bounds
+                        break;
+                    }
+                }
+
+                //End row
+                movieGrid += '</div>';
+            }
+
+            fs.readFile('site/template.html', 'utf-8', (err, data) => {
+                //Replace parts of template
+                data = data.replace('{loginOptions}', hP.getLoginOptions(req.cookies.sessionToken, req.cookies.userID, configData));
+                data = data.replace('{body}', fs.readFileSync('site/index.html', {encoding: 'utf8'}).replace('{movieGrid}', movieGrid));
+
+                //Send back result
+                res.send(data);
+            });
+        });
+    });
 });
 
 

@@ -23,10 +23,10 @@ const updateDatabaseURL = async function(url, movieID, dbConnection) {
 }
 
 const getRandomInt = function(min, range) {
-    return Math.round(Math.pow(Math.random(), 8) * range + min);
+    return Math.round(Math.pow(Math.random(), 3) * range + min);
 }
 
-const getLoginOptions = function(sessionToken, userID) {
+const getLoginOptions = function(sessionToken, userID, configData) {
     let loginOptions = '<ul class="nav nav-pills">\n<li class="nav-item">\n<a href="login.html" class="nav-link active" aria-current="page">Log ind</a>\n</li>\n<li class="nav-item">\n<a href="signup.html" class="nav-link" aria-current="page">Opret bruger</a>\n</li>\n</ul>';
 
     if (sessionToken) {
